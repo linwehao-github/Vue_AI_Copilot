@@ -3,6 +3,7 @@ export interface Message {
   role: 'user' | 'assistant'
   content: string
   createdAt: number
+  data?: AttachedData
 }
 
 export interface Conversation {
@@ -11,4 +12,18 @@ export interface Conversation {
   messages: Message[]
   createdAt: number
   updatedAt: number
+}
+
+export interface AttachedData {
+  columns: string[]
+  rows: string[][]
+  fileName: string
+  rowCount: number
+}
+
+export interface PendingAttachment {
+  columns: string[]
+  rows: string[][]
+  fileName: string
+  rowCount: number
 }

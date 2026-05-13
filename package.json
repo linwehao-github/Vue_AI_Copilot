@@ -9,15 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "echarts": "^6.0.0",
     "highlight.js": "^11.11.1",
     "marked": "^15.0.4",
     "marked-highlight": "^2.2.4",
+    "papaparse": "^5.5.3",
     "pinia": "^2.3.0",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.5",
     "@types/node": "^22.10.0",
+    "@types/papaparse": "^5.5.2",
     "@vitejs/plugin-vue": "^5.2.3",
     "tailwindcss": "^4.1.5",
     "typescript": "~5.7.2",

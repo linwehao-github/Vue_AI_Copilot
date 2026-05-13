@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { useChatStore } from '@/stores/chat'
 import ConversationSidebar from './ConversationSidebar.vue'
+import FileDropZone from './FileDropZone.vue'
 import MessageList from './MessageList.vue'
 import InputBox from './InputBox.vue'
 
@@ -10,6 +11,45 @@ const sidebarOpen = ref(true)
 
 function handleSend(content: string) {
   store.sendMessage(content)
+}
+
+function handleAttach(columns: string[], rows: string[][], fileName: string) {
+  store.attachData(columns, rows, fileName)
+}
+
+async function handleAttachFile(file: File) {
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  if (!ext || !['csv', 'xlsx', 'xls'].includes(ext)) return
+
+  try {
+    if (ext === 'csv') {
+      const Papa = (await import('papaparse')).default
+      const text = await file.text()
+      Papa.parse(text, {
+        header: false,
+        skipEmptyLines: true,
+        complete(results) {
+          const data = results.data as string[][]
+          if (data.length > 0) {
+            const cols = data[0].map((c) => String(c))
+            store.attachData(cols, data.slice(1), file.name)
+          }
+        },
+      })
+    } else {
+      const XLSX = await import('xlsx')
+      const buffer = await file.arrayBuffer()
+      const workbook = XLSX.read(buffer, { type: 'array' })
+      const sheet = workbook.Sheets[workbook.SheetNames[0]]
+      const data = XLSX.utils.sheet_to_json<string[]>(sheet, { header: 1, defval: '' })
+      if (data.length > 0) {
+        const cols = data[0].map((c) => String(c))
+        store.attachData(cols, data.slice(1), file.name)
+      }
+    }
+  } catch {
+    // 解析失败静默处理
+  }
 }
 </script>
 
@@ -32,7 +72,6 @@ function handleSend(content: string) {
         class="flex items-center justify-between px-6 py-4 bg-white border-b border-gray-200"
       >
         <div class="flex items-center gap-3">
-          <!-- 侧边栏切换按钮 -->
           <button
             class="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 transition-colors text-gray-500"
             @click="sidebarOpen = !sidebarOpen"
@@ -58,12 +97,22 @@ function handleSend(content: string) {
 
         <button
           class="text-sm text-gray-400 hover:text-gray-600 transition-colors"
-          :disabled="store.activeMessages.length === 0 && !store.loading"
+          :disabled="store.activeMessages.length === 0 && !store.loading && !store.pendingAttachment"
           @click="store.clearMessages"
         >
           清空对话
         </button>
       </header>
+
+      <!-- 文件拖拽上传区 -->
+      <div class="px-4 pt-4 bg-gray-50">
+        <div class="max-w-3xl mx-auto">
+          <FileDropZone
+            @attach="handleAttach"
+            @clear="store.clearAttachment()"
+          />
+        </div>
+      </div>
 
       <!-- 消息列表 -->
       <MessageList :messages="store.activeMessages" />
@@ -87,6 +136,7 @@ function handleSend(content: string) {
         :loading="store.loading"
         :disabled="store.loading"
         @send="handleSend"
+        @attach-file="handleAttachFile"
       />
     </div>
   </div>

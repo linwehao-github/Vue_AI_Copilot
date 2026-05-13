@@ -46,14 +46,18 @@ function formatTime(ts: number): string {
         <p class="text-center text-gray-500 text-sm mt-8">暂无对话</p>
       </template>
 
-      <button
+      <div
         v-for="conv in conversations"
         :key="conv.id"
-        class="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors group relative"
+        role="button"
+        tabindex="0"
+        class="w-full text-left px-3 py-2.5 rounded-lg text-sm transition-colors group relative cursor-pointer"
         :class="conv.id === activeId
           ? 'bg-gray-700 text-white'
           : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'"
         @click="emit('switch', conv.id)"
+        @keydown.enter="emit('switch', conv.id)"
+        @keydown.space.prevent="emit('switch', conv.id)"
       >
         <div class="truncate pr-6 font-medium">{{ conv.title }}</div>
         <div class="text-xs mt-0.5 text-gray-500">
@@ -74,7 +78,7 @@ function formatTime(ts: number): string {
                   d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
           </svg>
         </button>
-      </button>
+      </div>
     </nav>
   </aside>
 </template>

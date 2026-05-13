@@ -13,10 +13,17 @@ interface SendMessageParams {
 export async function sendAiMessage(params: SendMessageParams): Promise<void> {
   const { messages, onToken, onDone, onError } = params
 
-  // 拼装消息列表：前置系统提示词，强制中文回复
+  // 拼装消息列表：前置系统提示词
   const systemMsg = {
     role: 'system' as const,
-    content: '你是一个有帮助的AI助手。请始终使用中文回答用户的问题，保持回答简洁准确。即使用户用其他语言提问，你也应该用中文回复。',
+    content:
+      '你是一个有帮助的AI助手。请始终使用中文回答用户的问题，保持回答简洁准确。\n\n' +
+      '当你收到表格数据并需要做数据可视化时，请用 ```echarts 代码块输出 ECharts 配置 JSON。\n' +
+      '要求：\n' +
+      '1. 使用合理的图表类型（折线图 line、柱状图 bar、饼图 pie、散点图 scatter 等）\n' +
+      '2. 包含完整的 option 对象：title、xAxis、yAxis、series、tooltip、legend\n' +
+      '3. 颜色搭配美观，图表尺寸自适应\n' +
+      '4. 在 echarts 代码块前后用文字说明分析结论',
   }
   const bodyMessages = [
     systemMsg,

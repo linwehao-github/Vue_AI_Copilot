@@ -1,9 +1,12 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { Message, Conversation } from '@/types'
+import type { Message, Conversation, PendingAttachment, AttachedData } from '@/types'
 import { sendAiMessage } from '@/services/ai'
 
 const STORAGE_KEY = 'vue-ai-copilot-conversations'
+const MAX_DATA_ROWS = 50 // 发送给 AI 的最大行数
+const MAX_FILE_SIZE = 10 * 1024 * 1024 // 10MB
+const MAX_ROW_COUNT = 10_000 // 预览最大行数
 
 function genId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2)
@@ -29,12 +32,25 @@ function saveToStorage(conversations: Conversation[]) {
   }
 }
 
+/** 将表格数据格式化为 Markdown 表格文本 */
+function formatDataToMarkdown(columns: string[], rows: string[][]): string {
+  const header = '| ' + columns.join(' | ') + ' |'
+  const sep = '| ' + columns.map(() => '---').join(' | ') + ' |'
+  const body = rows.slice(0, MAX_DATA_ROWS).map((row) => {
+    const cells = row.map((cell) => String(cell).replace(/\|/g, '\\|').replace(/\n/g, ' '))
+    while (cells.length < columns.length) cells.push('')
+    return '| ' + cells.slice(0, columns.length).join(' | ') + ' |'
+  })
+  return [header, sep, ...body].join('\n')
+}
+
 export const useChatStore = defineStore('chat', () => {
   // --- 状态 ---
   const conversations = ref<Conversation[]>(loadFromStorage())
   const activeId = ref<string | null>(conversations.value[0]?.id ?? null)
   const loading = ref(false)
   const error = ref<string | null>(null)
+  const pendingAttachment = ref<PendingAttachment | null>(null)
 
   // 初始化：无对话时创建一条默认空对话
   if (conversations.value.length === 0) {
@@ -72,6 +88,7 @@ export const useChatStore = defineStore('chat', () => {
     }
     conversations.value.push(c)
     activeId.value = c.id
+    pendingAttachment.value = null
     saveToStorage(conversations.value)
   }
 
@@ -88,12 +105,11 @@ export const useChatStore = defineStore('chat', () => {
     conversations.value.splice(idx, 1)
 
     if (activeId.value === id) {
-      // 删的是当前对话：切换到第一个，无则新建
       if (conversations.value.length > 0) {
         activeId.value = conversations.value[0].id
       } else {
         createConversation()
-        return // createConversation 已保存
+        return
       }
     }
 
@@ -106,11 +122,29 @@ export const useChatStore = defineStore('chat', () => {
 
     error.value = null
 
+    // 组装完整消息内容（有附件时前置 Markdown 表格）
+    let fullContent = content.trim()
+    const attachment = pendingAttachment.value
+    let msgData: AttachedData | undefined
+
+    if (attachment) {
+      const table = formatDataToMarkdown(attachment.columns, attachment.rows)
+      fullContent = `以下是我上传的表格数据 "${attachment.fileName}"（共 ${attachment.rowCount} 行）：\n\n${table}\n\n---\n\n${fullContent}`
+      msgData = {
+        columns: attachment.columns,
+        rows: attachment.rows.slice(0, MAX_ROW_COUNT),
+        fileName: attachment.fileName,
+        rowCount: attachment.rowCount,
+      }
+      pendingAttachment.value = null
+    }
+
     const userMsg: Message = {
       id: genId(),
       role: 'user',
-      content: content.trim(),
+      content: fullContent,
       createdAt: Date.now(),
+      data: msgData,
     }
     conv.messages.push(userMsg)
 
@@ -156,7 +190,20 @@ export const useChatStore = defineStore('chat', () => {
     conv.title = '新对话'
     conv.updatedAt = Date.now()
     error.value = null
+    pendingAttachment.value = null
     saveToStorage(conversations.value)
+  }
+
+  function attachData(columns: string[], rows: string[][], fileName: string, totalRowCount?: number) {
+    const rowCount = totalRowCount ?? rows.length
+    if (rows.length > MAX_ROW_COUNT) {
+      rows = rows.slice(0, MAX_ROW_COUNT)
+    }
+    pendingAttachment.value = { columns, rows, fileName, rowCount }
+  }
+
+  function clearAttachment() {
+    pendingAttachment.value = null
   }
 
   return {
@@ -164,6 +211,7 @@ export const useChatStore = defineStore('chat', () => {
     activeId,
     loading,
     error,
+    pendingAttachment,
     activeConversation,
     activeMessages,
     sortedConversations,
@@ -172,5 +220,8 @@ export const useChatStore = defineStore('chat', () => {
     deleteConversation,
     sendMessage,
     clearMessages,
+    attachData,
+    clearAttachment,
+    MAX_FILE_SIZE,
   }
 })

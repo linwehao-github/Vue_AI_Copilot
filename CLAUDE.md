@@ -1,20 +1,75 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 ## 角色
 你是一位资深前端工程师，擅长 Vue 3 生态和 AI 应用开发。
 
 ## 技术栈
-- Framework: Vue 3 (必须用 <script setup> 语法，Composition API)
-- Language: TypeScript (严格模式)
-- State Management: Pinia
-- Styling: Tailwind CSS / UnoCSS
-- HTTP Client: Axios / Fetch
-- Lint: ESLint + Prettier
+- Framework: Vue 3（`<script setup>` + Composition API）
+- Language: TypeScript（strict 模式，`noUnusedLocals` / `noUnusedParameters` 开启）
+- State Management: Pinia（单 Store，Composition API 风格）
+- Styling: Tailwind CSS v4（`@tailwindcss/vite` 插件，CSS-first 配置）
+- Build: Vite 6，`vue-tsc -b` 作为 build 前置类型检查
+
+## 命令
+```bash
+npm run dev       # 启动开发服务器（含 HMR 和 /api/chat 代理）
+npm run build     # vue-tsc 类型检查 + Vite 生产构建
+npm run preview   # 预览生产构建
+```
+
+开发前必须设置系统环境变量 `OPEN_AI_KEY`（阿里 DashScope API Key）。不设置时 dev server 会打印警告，API 请求会 401。
+
+## 架构
+
+### 数据流
+```
+InputBox/FileDropZone → ChatWindow → useChatStore.sendMessage()
+  → sendAiMessage() (SSE fetch /api/chat)
+    → proxy → dashscope.aliyuncs.com/compatible-mode/v1/chat/completions
+    → SSE 流式解析 → onToken → messages[aiIdx].content 逐字追加
+    → MessageList 自动滚底
+    → MessageItem 渲染 Markdown（marked + highlight.js）或 ECharts 图表
+```
+
+### 组件树
+```
+App → ChatWindow
+        ├── ConversationSidebar（多对话列表）
+        ├── FileDropZone（CSV/Excel 拖拽上传）
+        ├── MessageList → MessageItem（可能含 DataTablePreview）
+        └── InputBox
+```
+
+### Store (`src/stores/chat.ts`)
+唯一 Pinia Store。核心状态：`conversations`、`activeId`、`loading`、`error`、`pendingAttachment`。
+- 所有对话持久化到 `localStorage`（key: `vue-ai-copilot-conversations`），每次变更后自动保存，启动时自动加载
+- 首条用户消息自动截取前 30 字作为对话标题
+- 上传文件后 `attachData()` 暂存，下次 `sendMessage()` 时将表格格式化为 Markdown 注入消息，发送后清除
+
+### API 代理 (`vite.config.ts`)
+Vite dev server 将 `POST /api/chat` 代理到 `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`。在 `proxyReq` 中注入 `Authorization: Bearer <OPEN_AI_KEY>`。Key 仅存在于 Node 服务端，不暴露给浏览器。
+
+### SSE 流式解析 (`src/services/ai.ts`)
+手动解析 `ReadableStream`，用行缓冲区处理跨 chunk 断行。请求体为 OpenAI 兼容格式，模型 `qwen3-max`。系统提示词要求中文回复，并在需要可视化时输出 ` ```echarts {option} ``` ` 块。
+
+### ECharts 图表渲染 (`src/components/MessageItem.vue`)
+这是最关键的渲染逻辑：
+1. 自定义 `marked` renderer：拦截 `lang === 'echarts'` 的 code block，将其替换为 `<div class="echart-placeholder" data-option="...">`（JSON 经 URI 编码）
+2. `watch(renderedContent)` + `nextTick()` 后扫描未初始化的 placeholder，尝试 `JSON.parse` 并 `echarts.init()`
+3. 流式输出中 JSON 不完整时 parse 失败 → 静默跳过，下次 token 到达后重试
+4. `data-initialized` 属性防止重复初始化
+5. `onBeforeUnmount` 中 dispose 所有 ECharts 实例，移除 resize 监听
+
+### 文件解析
+CSV（papaparse）和 Excel（xlsx）均通过动态 `import()` 加载，不进入初始 bundle。`FileDropZone.vue` 和 `ChatWindow.vue` 中各有解析逻辑。
+
+### 多对话管理
+无 vue-router，对话切换纯靠 Pinia `activeId` 状态驱动。`ConversationSidebar.vue` 列表项外层是 `<div role="button">`（不是 `<button>`，因为内部嵌套了删除 `<button>`）。
 
 ## 代码规范
-- 组件命名使用 PascalCase (如 ChatWindow.vue)
-- Ref 变量在 template 中直接使用（不需要 .value）
-- 复杂的业务逻辑（如 AI 流处理、消息状态）优先抽离成 Composables (存放在 src/composables)
-- 所有的 Props 和 Emit 必须包含完整的 TypeScript 类型定义
-- 不要使用 any，尽量使用 interface 或 type 定义数据结构
-
-## 项目上下文
-这是一个 Vue AI Copilot 项目，目标是构建一个类 ChatGPT 的对话应用，支持流式输出、多轮对话和后续的多模态扩展。
+- 组件 PascalCase，Props/Emits 完整 TypeScript 类型，不用 `any`
+- Ref 在 template 中自动解包，不需要 `.value`；但在 `<script>` 中修改 ref 必须用 `.value`
+- **Vue 响应式陷阱**：push 到 `ref<Array>` 后再通过原始对象引用修改属性不会触发更新，必须通过 `messages.value[idx].content` 访问 Proxy
+- 复杂逻辑优先抽离到 `src/composables/`（当前尚未使用）

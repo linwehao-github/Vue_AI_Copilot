@@ -8,9 +8,11 @@ defineProps<{
 
 const emit = defineEmits<{
   send: [content: string]
+  attachFile: [file: File]
 }>()
 
 const input = ref('')
+const fileInput = ref<HTMLInputElement | null>(null)
 
 function handleSend() {
   const text = input.value.trim()
@@ -18,11 +20,42 @@ function handleSend() {
   emit('send', text)
   input.value = ''
 }
+
+function handleFileSelect(e: Event) {
+  const target = e.target as HTMLInputElement
+  const file = target.files?.[0]
+  if (file) {
+    emit('attachFile', file)
+  }
+  target.value = ''
+}
 </script>
 
 <template>
   <div class="border-t border-gray-200 bg-white px-4 py-4">
     <div class="max-w-3xl mx-auto flex items-end gap-3">
+      <!-- 附件按钮 -->
+      <input
+        ref="fileInput"
+        type="file"
+        accept=".csv,.xlsx,.xls"
+        class="hidden"
+        @change="handleFileSelect"
+      />
+      <button
+        class="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-xl
+               text-gray-400 hover:text-blue-500 hover:bg-blue-50 transition-colors
+               disabled:cursor-not-allowed disabled:opacity-40"
+        :disabled="disabled"
+        @click="fileInput?.click()"
+        title="上传 CSV/Excel 文件"
+      >
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+        </svg>
+      </button>
+
       <textarea
         v-model="input"
         :disabled="disabled"
@@ -47,7 +80,6 @@ function handleSend() {
         :disabled="loading || !input.trim()"
         @click="handleSend"
       >
-        <!-- Loading 旋转图标 -->
         <svg
           v-if="loading"
           class="animate-spin w-4 h-4"
