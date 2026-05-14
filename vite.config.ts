@@ -31,6 +31,31 @@ export default defineConfig(() => {
             })
           },
         },
+        '/api/image/generate': {
+          target: 'https://dashscope.aliyuncs.com',
+          changeOrigin: true,
+          rewrite: () => '/api/v1/services/aigc/text2image/image-synthesis',
+          configure(proxy) {
+            proxy.on('proxyReq', (proxyReq) => {
+              if (openAiKey) {
+                proxyReq.setHeader('Authorization', `Bearer ${openAiKey}`)
+              }
+              proxyReq.setHeader('X-DashScope-Async', 'enable')
+            })
+          },
+        },
+        '/api/image/task': {
+          target: 'https://dashscope.aliyuncs.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/image\/task/, '/api/v1/tasks'),
+          configure(proxy) {
+            proxy.on('proxyReq', (proxyReq) => {
+              if (openAiKey) {
+                proxyReq.setHeader('Authorization', `Bearer ${openAiKey}`)
+              }
+            })
+          },
+        },
       },
     },
   }

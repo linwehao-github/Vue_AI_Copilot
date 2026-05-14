@@ -6,6 +6,10 @@ import FileDropZone from './FileDropZone.vue'
 import MessageList from './MessageList.vue'
 import InputBox from './InputBox.vue'
 
+defineEmits<{
+  navigateOutfit: []
+}>()
+
 const store = useChatStore()
 const sidebarOpen = ref(true)
 
@@ -95,13 +99,22 @@ async function handleAttachFile(file: File) {
           </div>
         </div>
 
-        <button
-          class="text-sm text-gray-400 hover:text-gray-600 transition-colors"
-          :disabled="store.activeMessages.length === 0 && !store.loading && !store.pendingAttachment"
-          @click="store.clearMessages"
-        >
-          清空对话
-        </button>
+        <div class="flex items-center gap-2">
+          <button
+            class="px-3 py-1.5 text-sm font-medium rounded-lg bg-gradient-to-r from-pink-400 to-rose-500 text-white
+                   hover:from-pink-500 hover:to-rose-600 active:scale-95 transition-all shadow-sm"
+            @click="$emit('navigateOutfit')"
+          >
+            穿搭推荐
+          </button>
+          <button
+            class="text-sm text-gray-400 hover:text-gray-600 transition-colors"
+            :disabled="store.activeMessages.length === 0 && !store.loading && !store.pendingAttachment"
+            @click="store.clearMessages"
+          >
+            清空对话
+          </button>
+        </div>
       </header>
 
       <!-- 文件拖拽上传区 -->
